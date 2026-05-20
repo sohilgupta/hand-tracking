@@ -1,0 +1,656 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Hand Tracking Art — style.css
+   Cyberpunk / hacker aesthetic — glassmorphism panels, neon accents,
+   fullscreen layout, overlay canvas positioning, loading screen,
+   settings panel, and all UI chip styles.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Google Fonts ──────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+/* ── Reset & Root ──────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --font: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --accent: #0fc;
+  --accent-cyan: #0ff;
+  --accent-magenta: #f0f;
+  --chip-bg: rgba(0, 0, 0, 0.60);
+  --chip-border: rgba(255, 255, 255, 0.08);
+  --chip-text: rgba(212, 212, 216, 0.85);
+  --panel-bg: rgba(0, 0, 0, 0.70);
+  --radius: 8px;
+  --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: var(--font);
+  cursor: none;               /* Hide cursor throughout experience */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Webcam video (hidden — source texture only) ───────────────────────── */
+#webcam-video {
+  position: fixed;
+  /* Placed off-screen but accessible to WebGL; actual display via canvas   */
+  top: 0;
+  left: -9999px;
+  width: 1280px;
+  height: 720px;
+  opacity: 0;
+  pointer-events: none;
+  /* Mirror horizontally so it feels like a natural reflection              */
+  transform: scaleX(-1);
+}
+
+/* ── Canvas layers (stacked via position:fixed) ────────────────────────── */
+#gl-canvas,
+#overlay-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#gl-canvas {
+  z-index: 1;     /* Bottom layer — WebGL shader rendering */
+}
+
+#overlay-canvas {
+  z-index: 2;     /* Top layer — particles + orb + label, pointer-events off */
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Loading Screen
+   ═══════════════════════════════════════════════════════════════════════════ */
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+}
+
+#loading-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Animated orb — cyan / magenta neon glow */
+.loading-orb {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0%, #0ff 40%, #0fc 80%, transparent 100%);
+  box-shadow:
+    0 0 20px rgba(0, 255, 255, 0.6),
+    0 0 60px rgba(0, 255, 204, 0.3);
+  animation: orb-pulse 2s ease-in-out infinite;
+}
+
+@keyframes orb-pulse {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%       { transform: scale(1.15); opacity: 0.8; }
+}
+
+.loading-text {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  animation: loading-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes loading-blink {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
+.loading-sub {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.25);
+  text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Gesture Label Chip
+   ═══════════════════════════════════════════════════════════════════════════ */
+#gesture-label {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 7px 18px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: opacity var(--transition);
+}
+
+#gesture-text {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--chip-text);
+  transition: opacity 0.2s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Activation Hint
+   ═══════════════════════════════════════════════════════════════════════════ */
+#activation-hint {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  font-size: 11px;
+  font-weight: 300;
+  letter-spacing: 0.25em;
+  text-transform: lowercase;
+  color: rgba(255, 255, 255, 0.25);
+  opacity: 0;
+  transition: opacity 1s ease;
+  pointer-events: none;
+}
+
+#activation-hint.visible {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mic Indicator
+   ═══════════════════════════════════════════════════════════════════════════ */
+#mic-indicator {
+  position: fixed;
+  bottom: 28px;
+  right: 24px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: none;
+}
+
+#mic-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.mic-dot-off {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.mic-dot-on {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: mic-pulse 0.8s ease-in-out infinite;
+}
+
+.mic-dot-unavailable {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 80, 80, 0.6);
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Quality Indicator
+   ═══════════════════════════════════════════════════════════════════════════ */
+#quality-indicator {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 50;
+  padding: 5px 12px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+#quality-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Debug Overlay
+   ═══════════════════════════════════════════════════════════════════════════ */
+#debug-overlay {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 90;
+  padding: 14px 18px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  min-width: 200px;
+}
+
+#debug-overlay[hidden] {
+  display: none;
+}
+
+.debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.debug-key {
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+}
+
+.debug-row span:last-child {
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Gear Icon Button (Settings toggle)
+   ═══════════════════════════════════════════════════════════════════════════ */
+#gear-btn {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 85;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.2s ease, left var(--transition), border-color 0.2s ease;
+  font-family: var(--font);
+}
+
+#gear-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Shift gear button right when settings panel is open */
+body.panel-open #gear-btn {
+  left: calc(min(320px, 85vw) + 24px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Settings Panel — glassmorphism slide-in drawer
+   ═══════════════════════════════════════════════════════════════════════════ */
+#settings-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: min(320px, 85vw);
+  height: 100%;
+  z-index: 80;
+  background: var(--panel-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  transform: translateX(-100%);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  padding: 20px;
+  font-family: var(--font);
+}
+
+#settings-panel.open {
+  transform: translateX(0);
+}
+
+/* Custom scrollbar — thin, cyan-themed */
+#settings-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+#settings-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#settings-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+#settings-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 255, 0.4);
+}
+
+/* Firefox scrollbar */
+#settings-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 255, 0.2) transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Panel Header
+   ═══════════════════════════════════════════════════════════════════════════ */
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+}
+
+.panel-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  font-family: var(--font);
+}
+
+.panel-close:hover {
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Panel Sections
+   ═══════════════════════════════════════════════════════════════════════════ */
+.panel-section {
+  margin-top: 20px;
+}
+
+.section-title {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 12px;
+}
+
+.panel-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.panel-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.panel-value {
+  font-size: 10px;
+  color: var(--accent-cyan);
+  min-width: 35px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Slider Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+input[type='range'].panel-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  outline: none;
+  margin: 8px 0;
+  cursor: pointer;
+}
+
+/* WebKit track */
+input[type='range'].panel-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+/* WebKit thumb */
+input[type='range'].panel-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  border: none;
+  cursor: pointer;
+  margin-top: -4.5px;  /* Center thumb on track: -(thumbH - trackH) / 2 */
+  box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+}
+
+/* Moz track */
+input[type='range'].panel-slider::-moz-range-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  border: none;
+}
+
+/* Moz thumb */
+input[type='range'].panel-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Toggle Switch
+   ═══════════════════════════════════════════════════════════════════════════ */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9px;
+  transition: background 0.25s ease;
+  cursor: pointer;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.25s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Landmark Data Table
+   ═══════════════════════════════════════════════════════════════════════════ */
+.landmark-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+}
+
+.landmark-table th {
+  text-align: left;
+  color: rgba(255, 255, 255, 0.25);
+  padding: 3px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+}
+
+.landmark-table td {
+  padding: 3px 4px;
+  color: rgba(255, 255, 255, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.landmark-table tr:hover td {
+  color: var(--accent-cyan);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Keyboard Shortcuts Section
+   ═══════════════════════════════════════════════════════════════════════════ */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 6px 8px;
+  font-size: 9px;
+  align-items: center;
+}
+
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font);
+}
+
+.shortcut-desc {
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 20px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Responsive — desktop-primary, graceful on smaller screens
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  #gesture-label {
+    bottom: 24px;
+    font-size: 10px;
+  }
+
+  #mic-indicator,
+  #quality-indicator {
+    font-size: 9px;
+    padding: 4px 9px;
+  }
+
+  /* Settings panel goes full width on mobile */
+  #settings-panel {
+    width: 100vw;
+  }
+
+  body.panel-open #gear-btn {
+    left: calc(100vw - 32px - 12px);
+  }
+}

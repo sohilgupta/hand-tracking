@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>X-Ray Hand Tracker — Interactive Webcam Experience</title>
+  <meta name="description" content="An immersive fullscreen browser-based X-ray skeleton visualization experience powered by MediaPipe Hands and WebGL shaders." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- MediaPipe Hands from CDN (only hands — camera is handled via raw getUserMedia) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <!-- ── Hidden webcam video element ─────────────────────────────────────── -->
+  <!-- CSS-mirrored horizontally so the user sees a natural reflection       -->
+  <video id="webcam-video" autoplay playsinline muted></video>
+
+  <!-- ── WebGL canvas (bottom layer) ────────────────────────────────────── -->
+  <!-- Receives the webcam texture and applies all shader effects             -->
+  <canvas id="gl-canvas"></canvas>
+
+  <!-- ── 2D overlay canvas (top layer) ──────────────────────────────────── -->
+  <!-- Draws the particle system, fingertip orb, and gesture label           -->
+  <canvas id="overlay-canvas"></canvas>
+
+  <!-- ── UI Layer ────────────────────────────────────────────────────────── -->
+
+  <!-- Loading screen: black overlay, fades out when webcam + MP ready      -->
+  <div id="loading-screen">
+    <div class="loading-content">
+      <div class="loading-orb"></div>
+      <p class="loading-text">Initializing</p>
+      <p class="loading-sub">Allow camera access to begin</p>
+    </div>
+  </div>
+
+  <!-- Gesture label chip — bottom-center                                    -->
+  <div id="gesture-label" aria-live="polite" aria-atomic="true">
+    <span id="gesture-text">—</span>
+  </div>
+
+  <!-- "Show your hand" activation hint — fades in after 3s idle             -->
+  <div id="activation-hint">show your hand</div>
+
+  <!-- Mic indicator — bottom-right                                          -->
+  <div id="mic-indicator">
+    <span id="mic-dot" class="mic-dot-off"></span>
+    <span id="mic-label">M · mic</span>
+  </div>
+
+  <!-- Quality indicator — top-right                                         -->
+  <div id="quality-indicator">
+    <span id="quality-label">Q · HIGH</span>
+  </div>
+
+  <!-- Debug overlay (toggle with D key) — top-left                         -->
+  <div id="debug-overlay" hidden>
+    <div class="debug-row"><span class="debug-key">FPS</span><span id="dbg-fps">—</span></div>
+    <div class="debug-row"><span class="debug-key">Gesture</span><span id="dbg-gesture">—</span></div>
+    <div class="debug-row"><span class="debug-key">Confidence</span><span id="dbg-conf">—</span></div>
+    <div class="debug-row"><span class="debug-key">Weights</span><span id="dbg-weights">—</span></div>
+    <div class="debug-row"><span class="debug-key">Particles</span><span id="dbg-particles">—</span></div>
+    <div class="debug-row"><span class="debug-key">Quality</span><span id="dbg-quality">—</span></div>
+    <div class="debug-row"><span class="debug-key">Velocity</span><span id="dbg-velocity">—</span></div>
+    <div class="debug-row"><span class="debug-key">Audio</span><span id="dbg-audio">—</span></div>
+  </div>
+
+  <!-- Gear button — opens settings panel                                    -->
+  <button id="gear-btn" aria-label="Toggle settings panel" title="Settings (S)">⚙</button>
+
+  <!-- Settings panel                                                        -->
+  <div id="settings-panel" role="dialog" aria-label="Settings">
+    <div class="panel-header">
+      <span class="panel-title">X-RAY TRACKER</span>
+      <button class="panel-close" id="panel-close-btn" aria-label="Close settings">✕</button>
+    </div>
+
+    <!-- Skeleton Section -->
+    <div class="panel-section">
+      <div class="section-title">Skeleton</div>
+      <div class="panel-row">
+        <span class="panel-label">Show skeleton</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-skeleton" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Bone width</span>
+        <span class="panel-value" id="val-bone-width">2</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-bone-width" min="1" max="6" step="0.5" value="2">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Joint size</span>
+        <span class="panel-value" id="val-joint-size">4</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-joint-size" min="2" max="10" step="0.5" value="4">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Skeleton opacity</span>
+        <span class="panel-value" id="val-skeleton-opacity">100%</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-skeleton-opacity" min="0" max="100" step="5" value="100">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Color-coded fingers</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-finger-colors" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Visual Effects Section -->
+    <div class="panel-section">
+      <div class="section-title">Visual Effects</div>
+      <div class="panel-row">
+        <span class="panel-label">Bloom</span>
+        <span class="panel-value" id="val-bloom">30%</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-bloom" min="0" max="100" step="5" value="30">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Vignette</span>
+        <span class="panel-value" id="val-vignette">55%</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-vignette" min="0" max="100" step="5" value="55">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Film grain</span>
+        <span class="panel-value" id="val-grain">4%</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-grain" min="0" max="30" step="1" value="4">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Lens distortion</span>
+        <span class="panel-value" id="val-lens">1.2%</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-lens" min="0" max="5" step="0.1" value="1.2">
+      </div>
+    </div>
+
+    <!-- Tracking Section -->
+    <div class="panel-section">
+      <div class="section-title">Tracking</div>
+      <div class="panel-row">
+        <span class="panel-label">Two-hand mode</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-two-hands" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Smoothing</span>
+        <span class="panel-value" id="val-smoothing">22%</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-smoothing" min="5" max="50" step="1" value="22">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Min confidence</span>
+        <span class="panel-value" id="val-confidence">65%</span>
+      </div>
+      <div class="panel-row" style="padding-top:0">
+        <input type="range" class="panel-slider" id="slider-confidence" min="30" max="90" step="5" value="65">
+      </div>
+    </div>
+
+    <!-- Landmark Data Section -->
+    <div class="panel-section">
+      <div class="section-title">Landmark Data</div>
+      <div class="panel-row">
+        <span class="panel-label">Show data</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-landmark-data">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="landmark-data-container" style="display:none">
+        <table class="landmark-table" id="landmark-table">
+          <thead>
+            <tr>
+              <th>Finger</th>
+              <th>Ext°</th>
+              <th>X</th>
+              <th>Y</th>
+              <th>Z</th>
+            </tr>
+          </thead>
+          <tbody id="landmark-tbody">
+            <tr><td>Thumb</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td>Index</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td>Middle</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td>Ring</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td>Pinky</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Section -->
+    <div class="panel-section">
+      <div class="section-title">Keyboard Shortcuts</div>
+      <div class="shortcuts-grid">
+        <span class="shortcut-key">S</span><span class="shortcut-desc">Toggle settings</span>
+        <span class="shortcut-key">D</span><span class="shortcut-desc">Debug overlay</span>
+        <span class="shortcut-key">M</span><span class="shortcut-desc">Toggle microphone</span>
+        <span class="shortcut-key">Q</span><span class="shortcut-desc">Cycle quality</span>
+        <span class="shortcut-key">H</span><span class="shortcut-desc">Toggle skeleton</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main script (deferred so DOM is ready)                                -->
+  <script src="script.js"></script>
+</body>
+</html>

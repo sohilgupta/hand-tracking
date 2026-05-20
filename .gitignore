@@ -1,0 +1,13 @@
+# OS
+.DS_Store
+
+# Brainstorm / session artifacts
+.superpowers/
+.gstack/
+*.jsonl
+
+# Vercel
+.vercel
+
+# Node (if ever added)
+node_modules/
